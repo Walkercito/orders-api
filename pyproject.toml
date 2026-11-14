@@ -3,6 +3,7 @@ name = "orders-api"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "faker>=40.54.0",
     "fastapi>=0.162.7",
     "polars>=2.1.0",
     "pydantic-ai-slim[openrouter]>=2.68.0",
@@ -10,6 +11,10 @@ dependencies = [
     "sqlglot>=30.31.0",
     "uvicorn>=0.54.0",
 ]
+
+[project.scripts]
+generate = "src.pipeline.generate:main"
+etl = "src.pipeline.etl:main"
 
 [dependency-groups]
 dev = [
