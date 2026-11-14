@@ -28,21 +28,15 @@ ejemplo, `LLM_MODEL` cambia el modelo y `QUERY_TIMEOUT` cambia el tiempo máximo
 ```bash
 curl -s http://127.0.0.1:8000/v1/completion \
   -H 'Content-Type: application/json' \
-  -d '{"question": "¿Quiénes son los 5 mejores clientes?"}'
+  -d '{"question": "¿Cuánto vendimos en España en marzo?"}'
 ```
 
 ```json
 {
-  "question": "¿Quiénes son los 5 mejores clientes?",
-  "sql": "SELECT customer, orders_count, total_amount FROM top_customers ORDER BY total_amount DESC, customer LIMIT 5",
-  "columns": ["customer", "orders_count", "total_amount"],
-  "rows": [
-    ["Mamen Roma Agustí", 11, 19183.87],
-    ["Anacleto Galván-Miranda", 11, 16673.38],
-    ["Rosalía Canales Ibarra", 9, 14370.28],
-    ["Miriam Nogueira", 9, 14185.13],
-    ["Apolonia Arévalo Canals", 7, 13823.26]
-  ]
+  "question": "¿Cuánto vendimos en España en marzo?",
+  "sql": "SELECT orders_count, total_amount FROM monthly_sales_by_country WHERE country = 'España' AND month = '2025-03' LIMIT 500",
+  "columns": ["orders_count", "total_amount"],
+  "rows": [[7, 10334.51]]
 }
 ```
 
@@ -115,6 +109,8 @@ tests/
 - **Resultado.** De 1.260 filas se cargan 1.122. Se descartan 51 duplicados, 48 importes
   inválidos, 27 fechas inválidas y 12 estados desconocidos.
 - **Ventas = pedidos `completed`.** Las vistas y las instrucciones del LLM usan la misma regla.
+- **Top 10 por importe.** `top_customers` ordena por el importe total de ventas, no por el
+  número de pedidos. Si hay empate, ordena por nombre.
 - **Esquema.** La tabla es `STRICT` y tiene restricciones `CHECK` (fecha ISO, importe > 0,
   estado válido). El ETL crea la base en un archivo temporal y lo cambia de forma atómica, así
   que un lector nunca ve una base a medio construir.
