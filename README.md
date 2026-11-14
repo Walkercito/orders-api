@@ -188,23 +188,49 @@ con datos inventados). El validador rechazó `pragma_table_info` con `unsafe_que
 
 ## Uso de IA
 
-<!-- Borrador con hechos. Edítalo con tu voz antes de entregar. -->
+Usé Claude Code como asistente de programación en todo el proyecto. Yo dirigí el trabajo: definí
+las reglas, tomé las decisiones finales y revisé cada fase antes de hacer el commit.
 
-- Usé Claude Code como asistente durante todo el proyecto. Trabajamos por fases (scaffold, datos,
-  validador, LLM + API, README) y revisé cada fase antes de hacer el commit.
-- Primero el asistente generó un `AGENTS.md` con las reglas del proyecto a partir de mis guías:
-  estándares de código, stack y comandos.
-- Mis decisiones:
-  - El asistente propuso `csv` de la librería estándar y el SDK de Anthropic. Los cambié por
-    polars y PydanticAI con OpenRouter.
-  - Pedí los scripts de uv (`uv run generate`), Faker y una estructura sin un paquete dentro de
-    `src/`.
-  - Pedí structlog para los logs y el endpoint versionado `/v1/completion`.
-- Correcciones que salieron de las revisiones:
-  - El validador aceptaba un CTE de una subconsulta como si ocultara una tabla real de la
-    consulta exterior. Ahora usa el mismo alcance que SQLite.
-  - Una columna BLOB daba un error 500. Ahora la respuesta la envía en base64.
-  - `SELECT zeroblob(200000000)` usaba 600 MB de memoria. Ahora el lector tiene límites de
-    tamaño.
-- La prueba E2E con el modelo real mostró que el modelo inventaba filas con literales. Por eso
-  agregué la salida `cannot_answer` y la regla de "al menos una tabla real".
+**Cómo trabajé**
+
+- Antes de escribir código, le di al asistente mis guías y le pedí un `AGENTS.md` con las reglas
+  del proyecto: estándares de código (OOP, DRY, sin valores mágicos, tipado completo), stack,
+  comandos y quality gate.
+- Dividí el trabajo en cinco fases. El asistente se detenía al final de cada una, yo revisaba el
+  resultado y después autorizaba el commit. Ningún commit entró sin mi aprobación.
+- Antes de entregar, pedí una revisión independiente con otro modelo (Fable 5.2). La revisión
+  comparó el repositorio con el enunciado, punto por punto.
+
+**Qué le pedí**
+
+- Generar los datos con Faker y limpiarlos con polars.
+- Una estructura de carpetas simple: `src/` es el paquete, sin otro paquete dentro, y los
+  comandos son scripts de uv (`uv run generate`, `uv run etl`, `uv run serve`).
+- Acceder al LLM con PydanticAI, para no depender de un proveedor, y usar OpenRouter en las
+  pruebas.
+- Logs con structlog y un endpoint versionado (`/v1/completion`).
+- Una prueba E2E de estrés con el modelo real, con cada caso límite posible.
+
+**Qué acepté**
+
+- SQLite como base de datos: era la opción más rápida y fácil para una prueba.
+- La seguridad en dos capas: validación del AST con sqlglot y una conexión de solo lectura.
+- La regla "ventas = pedidos `completed`" y el orden de las fases.
+- El tiempo máximo por consulta con `set_progress_handler`.
+- Las correcciones de las revisiones automáticas de seguridad: el alcance de los CTE en el
+  validador, los límites de memoria del lector y los BLOB en base64.
+- Pasar los scripts `generate` y `etl` a structlog.
+
+**Qué corregí**
+
+- El asistente propuso el módulo `csv` de la librería estándar. Lo cambié por polars.
+- Propuso el SDK de Anthropic. Lo cambié por PydanticAI, para poder cambiar de modelo o de
+  proveedor sin cambiar el código.
+- Quité un paquete que sobraba dentro de `src/`.
+- La prueba E2E que pedí encontró el problema más importante del proyecto. Cuando el modelo no
+  podía responder, inventaba filas con un `SELECT` de literales, y la API devolvía 200. El
+  asistente propuso una solución en tres partes y la aprobé: la salida `cannot_answer`, la regla
+  del validador "al menos una tabla real" y un 422 cuando el filtro del proveedor bloquea la
+  pregunta.
+- De la revisión final apliqué tres cambios: la pregunta del enunciado como ejemplo, el
+  criterio del top 10 en "Decisiones" y quitar el banner de PydanticAI.
