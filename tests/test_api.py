@@ -19,12 +19,13 @@ from src.constants import (
     ALLOWED_TABLES,
     COUNTRIES,
     MAX_QUESTION_LENGTH,
+    MAX_ROWS,
     PRODUCTS,
     ErrorCode,
     OrderStatus,
 )
 from src.db.loader import OrdersLoader
-from src.db.reader import OrdersReader
+from src.db.reader import MAX_COLUMNS, MAX_VALUE_BYTES, OrdersReader
 from src.query.sql_generator import SqlGenerator
 from src.query.sql_guard import validate_sql
 
@@ -40,6 +41,11 @@ TOP_CUSTOMERS_SQL = "SELECT customer, total_amount FROM top_customers"
 # COUNT never ends on an endless CTE and LIMIT does not stop it: only the deadline does.
 ENDLESS_SQL = (
     "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n) SELECT COUNT(*) FROM n"
+)
+# Each value is under MAX_VALUE_BYTES; MAX_ROWS of them pass MAX_RESULT_BYTES.
+HUGE_RESULT_SQL = (
+    f"WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < {MAX_ROWS}) "
+    f"SELECT zeroblob({MAX_VALUE_BYTES // 2}) FROM n"
 )
 ORDERS = pl.DataFrame(
     {
@@ -133,6 +139,24 @@ def test_answers_with_validated_sql_and_rows(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.QUERY_FAILED,
             id="query-timeout",
+        ),
+        pytest.param(
+            returns_sql(f"SELECT zeroblob({MAX_VALUE_BYTES + 1})"),
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUERY_FAILED,
+            id="value-too-big",
+        ),
+        pytest.param(
+            returns_sql("SELECT " + ", ".join(["1"] * (MAX_COLUMNS + 1))),
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUERY_FAILED,
+            id="too-many-columns",
+        ),
+        pytest.param(
+            returns_sql(HUGE_RESULT_SQL),
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.QUERY_FAILED,
+            id="result-too-big",
         ),
         pytest.param(
             is_down, status.HTTP_502_BAD_GATEWAY, ErrorCode.LLM_UNAVAILABLE, id="model-down"
