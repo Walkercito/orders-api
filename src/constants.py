@@ -42,3 +42,8 @@ DATE_FORMATS: Final = (ISO_DATE_FORMAT, "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d")
 
 DATA_START_DATE: Final = date(2025, 1, 1)
 DATA_END_DATE: Final = date(2025, 12, 31)
+
+# The only tables and views that LLM-written SQL may read.
+ALLOWED_TABLES: Final = frozenset({"orders", "monthly_sales_by_country", "top_customers"})
+# Upper bound on rows per API query; validate_sql adds or lowers LIMIT to it.
+MAX_ROWS: Final = 500
