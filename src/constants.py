@@ -47,3 +47,14 @@ DATA_END_DATE: Final = date(2025, 12, 31)
 ALLOWED_TABLES: Final = frozenset({"orders", "monthly_sales_by_country", "top_customers"})
 # Upper bound on rows per API query; validate_sql adds or lowers LIMIT to it.
 MAX_ROWS: Final = 500
+# Longest question POST /v1/completion accepts.
+MAX_QUESTION_LENGTH: Final = 500
+
+
+class ErrorCode(StrEnum):
+    """`detail.code` of an API error response."""
+
+    LLM_UNAVAILABLE = "llm_unavailable"
+    LLM_INVALID_OUTPUT = "llm_invalid_output"
+    UNSAFE_QUERY = "unsafe_query"
+    QUERY_FAILED = "query_failed"

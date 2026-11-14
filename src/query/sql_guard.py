@@ -6,7 +6,8 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
-from src.constants import ALLOWED_TABLES, MAX_ROWS
+from src.constants import ALLOWED_TABLES, MAX_ROWS, ErrorCode
+from src.errors import AppError
 
 DIALECT: Final = "sqlite"
 # Searched in the whole tree, not only the root: sqlglot parses `SELECT ... INTO` and DML
@@ -24,8 +25,10 @@ FORBIDDEN_NODES: Final = (
 )
 
 
-class UnsafeQueryError(ValueError):
-    """The SQL must not run. The message gives the reason in Spanish, for the API."""
+class UnsafeQueryError(AppError):
+    """The SQL must not run. The message gives the reason."""
+
+    code = ErrorCode.UNSAFE_QUERY
 
 
 def validate_sql(sql: str) -> str:

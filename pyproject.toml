@@ -9,16 +9,18 @@ dependencies = [
     "pydantic-ai-slim[openrouter]>=2.68.0",
     "pydantic-settings>=2.16.3",
     "sqlglot>=30.31.0",
+    "structlog>=26.1.0",
     "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
 generate = "src.pipeline.generate:main"
 etl = "src.pipeline.etl:main"
+serve = "src.api.app:main"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
+    "httpx2>=2.16.0",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
     "ty>=0.0.104",

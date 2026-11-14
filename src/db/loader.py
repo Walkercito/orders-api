@@ -8,8 +8,8 @@ from typing import Final
 import polars as pl
 
 from src.constants import ISO_DATE_FORMAT, ORDER_COLUMNS
+from src.db.ddl import DdlScript
 
-SQL_DIR: Final = Path(__file__).parent
 # Column names come from a constant, never from CSV values; the values are parameters.
 INSERT_ORDER: Final = (
     f"INSERT INTO orders ({', '.join(ORDER_COLUMNS)}) "
@@ -33,12 +33,8 @@ class OrdersLoader:
             .iter_rows()
         )
         with closing(sqlite3.connect(staging)) as conn:
-            conn.executescript(_read_sql("schema.sql"))
+            conn.executescript(DdlScript.SCHEMA.read())
             with conn:
                 conn.executemany(INSERT_ORDER, rows)
-            conn.executescript(_read_sql("views.sql"))
+            conn.executescript(DdlScript.VIEWS.read())
         staging.replace(self._db_path)
-
-
-def _read_sql(name: str) -> str:
-    return (SQL_DIR / name).read_text(encoding="utf-8")
