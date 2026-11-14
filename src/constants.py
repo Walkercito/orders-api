@@ -58,3 +58,4 @@ class ErrorCode(StrEnum):
     LLM_INVALID_OUTPUT = "llm_invalid_output"
     UNSAFE_QUERY = "unsafe_query"
     QUERY_FAILED = "query_failed"
+    UNANSWERABLE = "unanswerable"

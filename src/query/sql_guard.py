@@ -53,10 +53,22 @@ def _parse_single(sql: str) -> exp.Expr:
 
 
 def _check_tables(query: exp.Expr) -> None:
+    reads_data = False
     for table in query.find_all(exp.Table):
-        allowed = table.name.lower() in ALLOWED_TABLES or _is_cte_reference(table)
-        if table.db or table.catalog or not allowed:
+        is_cte = _is_cte_reference(table)
+        if (
+            table.db
+            or table.catalog
+            or not (table.name.lower() in ALLOWED_TABLES or is_cte)
+        ):
             raise UnsafeQueryError(f"Tabla no permitida: {table.sql(dialect=DIALECT)}.")
+        reads_data = reads_data or not is_cte
+    # Without a real table the rows are literals the model made up, not data.
+    if not reads_data:
+        tables = ", ".join(sorted(ALLOWED_TABLES))
+        raise UnsafeQueryError(
+            f"La consulta debe leer al menos una de estas tablas: {tables}."
+        )
 
 
 def _is_cte_reference(table: exp.Table) -> bool:

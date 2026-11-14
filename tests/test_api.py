@@ -8,7 +8,7 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 from pydantic_ai import models
-from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.exceptions import ContentFilterError, ModelAPIError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from structlog.testing import capture_logs
@@ -26,7 +26,7 @@ from src.constants import (
 )
 from src.db.loader import OrdersLoader
 from src.db.reader import MAX_COLUMNS, MAX_VALUE_BYTES, OrdersReader
-from src.query.sql_generator import SqlGenerator
+from src.query.sql_generator import SQL_TOOL, UNANSWERABLE_TOOL, SqlGenerator
 from src.query.sql_guard import validate_sql
 
 type Reply = Callable[[list[ModelMessage], AgentInfo], ModelResponse]
@@ -38,14 +38,16 @@ LLM_TIMEOUT = 1.0
 QUERY_TIMEOUT = 0.1
 QUESTION = "¿Quiénes son los mejores clientes?"
 TOP_CUSTOMERS_SQL = "SELECT customer, total_amount FROM top_customers"
+REASON = "No hay datos del clima."
 # COUNT never ends on an endless CTE and LIMIT does not stop it: only the deadline does.
 ENDLESS_SQL = (
-    "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n) SELECT COUNT(*) FROM n"
+    "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n) "
+    "SELECT COUNT(*) FROM n, orders"
 )
 # Each value is under MAX_VALUE_BYTES; MAX_ROWS of them pass MAX_RESULT_BYTES.
 HUGE_RESULT_SQL = (
     f"WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < {MAX_ROWS}) "
-    f"SELECT zeroblob({MAX_VALUE_BYTES // 2}) FROM n"
+    f"SELECT zeroblob({MAX_VALUE_BYTES // 2}) FROM n, orders"
 )
 ORDERS = pl.DataFrame(
     {
@@ -60,11 +62,15 @@ ORDERS = pl.DataFrame(
 )
 
 
-def returns_sql(sql: str) -> Reply:
-    def reply(_: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"sql": sql})])
+def calls(tool: str, **args: str) -> Reply:
+    def reply(_: list[ModelMessage], __: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(tool, args)])
 
     return reply
+
+
+def returns_sql(sql: str) -> Reply:
+    return calls(SQL_TOOL, sql=sql)
 
 
 def returns_text(_: list[ModelMessage], __: AgentInfo) -> ModelResponse:
@@ -73,6 +79,10 @@ def returns_text(_: list[ModelMessage], __: AgentInfo) -> ModelResponse:
 
 def is_down(_: list[ModelMessage], __: AgentInfo) -> ModelResponse:
     raise ModelAPIError("function", "Servicio no disponible")
+
+
+def is_filtered(_: list[ModelMessage], __: AgentInfo) -> ModelResponse:
+    raise ContentFilterError("Content filter triggered")
 
 
 @pytest.fixture
@@ -98,7 +108,12 @@ def ask(db_path: Path, reply: Reply, question: str = QUESTION) -> httpx2.Respons
             [["Ana Ruiz", 100.0], ["Luis Gómez", 50.5]],
             id="sales-view",
         ),
-        pytest.param("SELECT x'ff00' AS b", ["b"], [["_wA="]], id="blob-as-base64"),
+        pytest.param(
+            "SELECT x'ff00' AS b FROM orders LIMIT 1",
+            ["b"],
+            [["_wA="]],
+            id="blob-as-base64",
+        ),
     ],
 )
 def test_answers_with_validated_sql_and_rows(
@@ -141,13 +156,13 @@ def test_answers_with_validated_sql_and_rows(
             id="query-timeout",
         ),
         pytest.param(
-            returns_sql(f"SELECT zeroblob({MAX_VALUE_BYTES + 1})"),
+            returns_sql(f"SELECT zeroblob({MAX_VALUE_BYTES + 1}) FROM orders"),
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.QUERY_FAILED,
             id="value-too-big",
         ),
         pytest.param(
-            returns_sql("SELECT " + ", ".join(["1"] * (MAX_COLUMNS + 1))),
+            returns_sql(f"SELECT {', '.join(['1'] * (MAX_COLUMNS + 1))} FROM orders"),
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.QUERY_FAILED,
             id="too-many-columns",
@@ -157,6 +172,18 @@ def test_answers_with_validated_sql_and_rows(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             ErrorCode.QUERY_FAILED,
             id="result-too-big",
+        ),
+        pytest.param(
+            calls(UNANSWERABLE_TOOL, reason=REASON),
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.UNANSWERABLE,
+            id="cannot-answer",
+        ),
+        pytest.param(
+            is_filtered,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            ErrorCode.UNANSWERABLE,
+            id="content-filter",
         ),
         pytest.param(
             is_down, status.HTTP_502_BAD_GATEWAY, ErrorCode.LLM_UNAVAILABLE, id="model-down"
@@ -189,6 +216,12 @@ def test_maps_each_failure_to_an_error_code(
     assert event["event"] == COMPLETION_EVENT
     assert event["error_code"] == code
     assert event["status_code"] == status_code
+
+
+def test_cannot_answer_returns_the_model_reason(db_path: Path) -> None:
+    response = ask(db_path, calls(UNANSWERABLE_TOOL, reason=f"  {REASON} "))
+
+    assert response.json()["detail"]["message"] == REASON
 
 
 def test_prompt_describes_the_data(db_path: Path) -> None:

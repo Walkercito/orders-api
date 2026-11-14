@@ -7,6 +7,7 @@ CAP = f"LIMIT {MAX_ROWS}"
 NOT_SELECT = "Solo se permiten consultas SELECT"
 FORBIDDEN_TABLE = "Tabla no permitida"
 NOT_ONE_STATEMENT = "exactamente una sentencia"
+NO_DATA = "debe leer al menos una"
 
 
 @pytest.mark.parametrize(
@@ -30,14 +31,15 @@ NOT_ONE_STATEMENT = "exactamente una sentencia"
         ),
         pytest.param(
             "WITH RECURSIVE m(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM m WHERE n < 12) "
-            "SELECT n FROM m",
+            "SELECT n, amount FROM m JOIN orders ON order_id = n",
             "WITH RECURSIVE m(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM m WHERE n < 12) "
-            f"SELECT n FROM m {CAP}",
+            f"SELECT n, amount FROM m JOIN orders ON order_id = n {CAP}",
             id="recursive-cte",
         ),
         pytest.param(
-            "WITH a AS (SELECT * FROM b), b AS (SELECT 1) SELECT * FROM a",
-            f"WITH a AS (SELECT * FROM b), b AS (SELECT 1) SELECT * FROM a {CAP}",
+            "WITH a AS (SELECT * FROM b), b AS (SELECT * FROM orders) SELECT * FROM a",
+            "WITH a AS (SELECT * FROM b), b AS (SELECT * FROM orders) "
+            f"SELECT * FROM a {CAP}",
             id="cte-forward-reference",
         ),
         pytest.param(
@@ -84,6 +86,15 @@ def test_accepts_read_only_select(sql: str, expected: str) -> None:
         ),
         pytest.param(
             "SELECT * INTO copy FROM orders", "no permitida: INTO", id="select-into"
+        ),
+        pytest.param("SELECT 1 AS tablas, 2 AS vistas", NO_DATA, id="literals-only"),
+        pytest.param(
+            "SELECT 'orders' UNION SELECT 'top_customers'", NO_DATA, id="literal-union"
+        ),
+        pytest.param(
+            "WITH orders AS (SELECT 1 AS x) SELECT * FROM orders",
+            NO_DATA,
+            id="cte-named-like-a-table",
         ),
         pytest.param("SELECT * FROM sqlite_master", FORBIDDEN_TABLE, id="sqlite-master"),
         pytest.param("SELECT * FROM customers", FORBIDDEN_TABLE, id="unknown-table"),

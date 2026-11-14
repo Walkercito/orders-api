@@ -29,6 +29,7 @@ HTTP_STATUS: Final = {
     ErrorCode.LLM_INVALID_OUTPUT: status.HTTP_502_BAD_GATEWAY,
     ErrorCode.UNSAFE_QUERY: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ErrorCode.QUERY_FAILED: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ErrorCode.UNANSWERABLE: status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
 ERROR_RESPONSES: Final[dict[int | str, dict[str, object]]] = {
     code: {"model": ErrorResponse} for code in set(HTTP_STATUS.values())
