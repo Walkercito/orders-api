@@ -5,6 +5,7 @@ from datetime import date
 from typing import Final
 
 import polars as pl
+import structlog
 from faker import Faker
 
 from src.config import Settings
@@ -18,6 +19,9 @@ from src.constants import (
     OrderStatus,
 )
 from src.pipeline.cleaning import RAW_SCHEMA
+
+logger = structlog.get_logger(__name__)
+GENERATE_EVENT: Final = "csv_generated"
 
 SEED: Final = 42
 LOCALE: Final = "es_ES"
@@ -134,4 +138,4 @@ def main() -> None:
     orders = OrderGenerator().generate()
     settings.csv_path.parent.mkdir(parents=True, exist_ok=True)
     orders.write_csv(settings.csv_path)
-    print(f"{orders.height} filas escritas en {settings.csv_path}")
+    logger.info(GENERATE_EVENT, rows=orders.height, csv_path=str(settings.csv_path))

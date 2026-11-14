@@ -1,10 +1,17 @@
 """Read the raw CSV, clean it and rebuild the SQLite database with its views."""
 
+from typing import Final
+
 import polars as pl
+import structlog
 
 from src.config import Settings
 from src.db.loader import OrdersLoader
 from src.pipeline.cleaning import RAW_SCHEMA, clean_orders
+
+logger = structlog.get_logger(__name__)
+# One event per run: every count of the cleaning report in one entry.
+ETL_EVENT: Final = "etl_finished"
 
 
 def main() -> None:
@@ -16,7 +23,10 @@ def main() -> None:
     orders, report = clean_orders(raw)
     OrdersLoader(settings.db_path).rebuild(orders)
 
-    print(f"Filas leídas: {report.read}")
-    for reason, count in report.dropped.items():
-        print(f"  descartadas ({reason}): {count}")
-    print(f"Filas cargadas: {report.kept} en {settings.db_path}")
+    logger.info(
+        ETL_EVENT,
+        read=report.read,
+        kept=report.kept,
+        db_path=str(settings.db_path),
+        **{f"dropped_{reason}": count for reason, count in report.dropped.items()},
+    )
