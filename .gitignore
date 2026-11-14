@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Generated data (CSV + SQLite)
+data/
+
+# Secrets
+.env
+
+# Local agent instructions (kept out of the repo for now)
+AGENTS.md
